@@ -1,0 +1,95 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Local LLM Endpoint Tester</title>
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+  <main class="app-shell">
+    <aside class="sidebar">
+      <div class="panel brand-panel">
+        <h1>Local LLM Endpoint Tester</h1>
+        <p>
+          This tester is built for <strong>LM Studio</strong>, <strong>Ollama</strong>, and
+          <strong>OpenClaw</strong>. Choose an app first, then the provider-specific connection
+          options will appear.
+        </p>
+      </div>
+
+      <div class="panel">
+        <label for="providerSelect" class="label">Choose app</label>
+        <select id="providerSelect" class="input">
+          <option value="">Select an app...</option>
+          <option value="lmstudio">LM Studio</option>
+          <option value="ollama">Ollama</option>
+          <option value="openclaw">OpenClaw</option>
+        </select>
+      </div>
+
+      <div id="dynamicControls" class="panel hidden" aria-live="polite">
+        <div id="providerIntro" class="intro-text"></div>
+
+        <label for="methodSelect" class="label">HTTP method</label>
+        <select id="methodSelect" class="input"></select>
+
+        <label for="requestUrlInput" class="label">Request URL</label>
+        <input
+          id="requestUrlInput"
+          class="input"
+          type="text"
+          placeholder="Enter the full request URL, for example https://your-host.example.com/v1/chat/completions"
+        />
+        <p class="helper-text" id="requestUrlHelpText">
+          Enter the full request URL. The selected provider endpoint below is optional and is mainly there as a helper.
+          If your entered URL already contains a path, the app will use your full URL exactly as entered.
+        </p>
+
+        <label for="endpointSelect" class="label">Endpoint helper</label>
+        <select id="endpointSelect" class="input"></select>
+
+        <label for="modelInput" class="label">Model</label>
+        <input
+          id="modelInput"
+          class="input"
+          type="text"
+          placeholder="Enter a model name if the selected endpoint needs one"
+        />
+
+        <label for="authTokenInput" class="label">Bearer token (optional)</label>
+        <input
+          id="authTokenInput"
+          class="input"
+          type="password"
+          placeholder="Enter a bearer token only if your endpoint requires it"
+        />
+
+        <div class="button-stack">
+          <button id="connectButton" class="button primary hidden" type="button">Connect</button>
+          <button id="clearButton" class="button secondary" type="button">Clear messages</button>
+        </div>
+
+        <div id="statusBox" class="status-box">Status: Waiting for provider selection.</div>
+      </div>
+    </aside>
+
+    <section class="chat-panel">
+      <header class="chat-header">
+        <div>
+          <h2>Response</h2>
+          <p>Connect sends a fixed <strong>hello</strong> test request using the selected app logic.</p>
+        </div>
+      </header>
+
+      <section id="messages" class="messages" aria-live="polite">
+        <article class="message system">
+          Select an app to begin. The correct fields and endpoint choices will appear dynamically.
+        </article>
+      </section>
+    </section>
+  </main>
+
+  <script type="module" src="main.js"></script>
+</body>
+</html>
