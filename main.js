@@ -37,16 +37,32 @@ const connectButton = document.getElementById('connectButton');
 const clearButton = document.getElementById('clearButton');
 const statusBox = document.getElementById('statusBox');
 const messages = document.getElementById('messages');
+const chatInput = document.getElementById('chatInput');
+const sendButton = document.getElementById('sendButton');
+
+/**
+ * Conversation state for the currently active chat session.
+ * Only user and assistant turns are stored so provider adapters can reuse them for context.
+ */
+let conversationHistory = [];
+
+/**
+ * Tracks whether the current provider/url combination passed the initial hello test.
+ * The chat composer stays disabled until the connect step succeeds.
+ */
+let isConnected = false;
 
 /**
  * Attach the core UI event listeners once the module loads.
- * The event flow is: choose provider, then endpoint helper, then connect.
+ * The event flow is: choose provider, then endpoint helper, then connect, then chat.
  */
 function init() {
   providerSelect.addEventListener('change', handleProviderChange);
   endpointSelect.addEventListener('change', handleEndpointChange);
   connectButton.addEventListener('click', handleConnect);
-  clearButton.addEventListener('click', clearMessages);
+  clearButton.addEventListener('click', clearChat);
+  sendButton.addEventListener('click', handleSendMessage);
+  chatInput.addEventListener('keydown', handleChatKeydown);
 }
 
 /**
@@ -56,6 +72,8 @@ function init() {
  */
 function handleProviderChange() {
   const provider = getSelectedProvider();
+
+  resetConnectionState();
 
   // If no provider is selected, hide the dynamic controls and reset the status text.
   if (!provider) {
@@ -88,6 +106,7 @@ function handleEndpointChange() {
     return;
   }
 
+  resetConnectionState();
   applyEndpointDefaults(provider);
   updateRequestUrlHelpText();
   updateConnectVisibility();
@@ -95,7 +114,7 @@ function handleEndpointChange() {
 
 /**
  * Populate the HTTP method dropdown.
- * The current providers all use POST for the hello test, but the UI keeps the method as an explicit field.
+ * The current providers all use POST, but the UI keeps the method as an explicit field.
  */
 function populateMethodSelect(provider) {
   methodSelect.innerHTML = '';
@@ -177,11 +196,85 @@ function updateConnectVisibility() {
  * This function delegates the request-building details to the selected provider adapter.
  */
 async function handleConnect() {
+  const requestContext = validateAndBuildContext();
+
+  if (!requestContext) {
+    return;
+  }
+
+  clearConversationMessages();
+  conversationHistory = [];
+
+  const result = await executeProviderRequest({
+    ...requestContext,
+    messageText: 'hello',
+    isConnectTest: true
+  });
+
+  if (result.success) {
+    isConnected = true;
+    syncComposerState();
+    setStatus('Connected successfully. You can now chat below.', 'ok');
+  }
+}
+
+/**
+ * Send a real chat message after the connect test has succeeded.
+ * The current conversation history is passed into the provider adapter so the endpoint can keep context.
+ */
+async function handleSendMessage() {
+  if (!isConnected) {
+    setStatus('Please connect first before sending chat messages.', 'error');
+    return;
+  }
+
+  const messageText = chatInput.value.trim();
+
+  if (!messageText) {
+    setStatus('Please type a message before sending.', 'error');
+    return;
+  }
+
+  const requestContext = validateAndBuildContext();
+
+  if (!requestContext) {
+    return;
+  }
+
+  chatInput.value = '';
+
+  const result = await executeProviderRequest({
+    ...requestContext,
+    messageText,
+    isConnectTest: false
+  });
+
+  if (result.success) {
+    setStatus('Message sent successfully.', 'ok');
+  }
+}
+
+/**
+ * Allow Enter to send and Shift + Enter to add a new line.
+ * This keeps the chat interaction feeling closer to a normal messaging interface.
+ */
+function handleChatKeydown(event) {
+  if (event.key === 'Enter' && !event.shiftKey) {
+    event.preventDefault();
+    handleSendMessage();
+  }
+}
+
+/**
+ * Validate the visible provider fields and build a normalized request context object.
+ * This prevents duplicate validation logic between connect and regular send actions.
+ */
+function validateAndBuildContext() {
   const provider = getSelectedProvider();
 
   if (!provider) {
     setStatus('Please select a provider first.', 'error');
-    return;
+    return null;
   }
 
   const selectedEndpoint = getSelectedEndpoint(provider);
@@ -194,29 +287,46 @@ async function handleConnect() {
   if (!inputUrl) {
     setStatus('Please enter a request URL first.', 'error');
     addMessage('system', 'A request URL is required before a request can be sent.');
-    return;
+    return null;
   }
 
   // Validate that the value is at least a syntactically valid absolute URL before fetch is attempted.
   if (!isAbsoluteHttpUrl(inputUrl)) {
     setStatus('Please enter a valid absolute http or https URL.', 'error');
     addMessage('system', `Invalid URL: ${inputUrl}`);
-    return;
+    return null;
   }
 
   // If the selected endpoint needs a model, require it before sending the request.
   if (selectedEndpoint?.requiresModel && !model) {
     setStatus('Please enter a model for the selected endpoint.', 'error');
-    addMessage('system', 'This endpoint requires a model value before the hello test can run.');
-    return;
+    addMessage('system', 'This endpoint requires a model value before a request can run.');
+    return null;
   }
 
+  return {
+    provider,
+    selectedEndpoint,
+    inputUrl,
+    method,
+    model,
+    token
+  };
+}
+
+/**
+ * Execute a provider request, update the UI, and optionally append the chat turn to history.
+ * This centralizes request/response handling so connect tests and normal chat messages behave consistently.
+ */
+async function executeProviderRequest({ provider, selectedEndpoint, inputUrl, method, model, token, messageText, isConnectTest }) {
   const { url, fetchOptions, diagnostics } = provider.buildRequest({
     inputUrl,
     endpoint: selectedEndpoint.value,
     method,
     model,
-    token
+    token,
+    messageText,
+    history: conversationHistory
   });
 
   const requestSummary = buildRequestSummary({
@@ -227,12 +337,13 @@ async function handleConnect() {
     helperEndpoint: selectedEndpoint.value,
     urlMode: diagnostics.urlMode,
     headers: redactHeaders(fetchOptions.headers),
-    requestBody: diagnostics.requestBody
+    requestBody: diagnostics.requestBody,
+    actionLabel: isConnectTest ? 'Connect test' : 'Chat request'
   });
 
-  addMessage('user', requestSummary);
-  setStatus(`Connecting to ${url} ...`, 'warning');
-  connectButton.disabled = true;
+  addMessage('user', isConnectTest ? requestSummary : messageText);
+  setStatus(`${isConnectTest ? 'Connecting' : 'Sending'} to ${url} ...`, 'warning');
+  setBusyState(true);
 
   try {
     const response = await fetch(url, fetchOptions);
@@ -251,14 +362,22 @@ async function handleConnect() {
     const data = safeJsonParse(responseText);
     const parsedMessage = provider.parseResponse(data, selectedEndpoint.value);
 
-    setStatus('Connected successfully.', 'ok');
     addMessage('assistant', `${parsedMessage}\n\nHTTP ${response.status} ${response.statusText || ''}`.trim());
+
+    // Only real chat turns are stored in the history. The connect test is intentionally excluded.
+    if (!isConnectTest) {
+      conversationHistory.push({ role: 'user', content: messageText });
+      conversationHistory.push({ role: 'assistant', content: parsedMessage });
+    }
+
+    return { success: true };
   } catch (error) {
     const detailedMessage = buildRuntimeErrorMessage(error);
     setStatus(`Connection failed. See details below.`, 'error');
     addMessage('system', detailedMessage);
+    return { success: false };
   } finally {
-    connectButton.disabled = false;
+    setBusyState(false);
   }
 }
 
@@ -266,12 +385,12 @@ async function handleConnect() {
  * Build a readable request summary.
  * This makes it obvious whether the app used the pasted full URL exactly as entered or appended a helper path.
  */
-function buildRequestSummary({ providerLabel, method, inputUrl, resolvedUrl, helperEndpoint, urlMode, headers, requestBody }) {
+function buildRequestSummary({ providerLabel, method, inputUrl, resolvedUrl, helperEndpoint, urlMode, headers, requestBody, actionLabel }) {
   const bodyText = requestBody ? JSON.stringify(requestBody, null, 2) : '(no request body)';
   const modeLabel = urlMode === 'full-url' ? 'full URL from input' : 'input host/root + helper endpoint';
 
   return [
-    `Connect test`,
+    `${actionLabel}`,
     `Provider: ${providerLabel}`,
     `Method: ${method}`,
     `Input URL: ${inputUrl}`,
@@ -359,11 +478,22 @@ function addMessage(role, content) {
 }
 
 /**
- * Clear all visible messages and restore the default helper text.
+ * Clear the current visible conversation and reset the stored history.
+ * This is useful when switching providers or starting a new test/chat session.
  */
-function clearMessages() {
+function clearChat() {
+  conversationHistory = [];
+  clearConversationMessages();
+  addMessage('system', 'Chat cleared. Select an app, connect again, and start a new conversation when ready.');
+  resetConnectionState();
+}
+
+/**
+ * Clear only the message list UI and restore the default helper text.
+ * This is used by both the clear action and the connect action when starting a fresh session.
+ */
+function clearConversationMessages() {
   messages.innerHTML = '';
-  addMessage('system', 'Messages cleared. Select an app and run another hello test when ready.');
 }
 
 /**
@@ -373,6 +503,37 @@ function clearMessages() {
 function setStatus(text, state = '') {
   statusBox.className = `status-box${state ? ` ${state}` : ''}`;
   statusBox.textContent = text;
+}
+
+/**
+ * Enable or disable the connect and send controls while a request is in flight.
+ * This helps prevent duplicate requests from repeated clicks.
+ */
+function setBusyState(isBusy) {
+  connectButton.disabled = isBusy;
+  sendButton.disabled = isBusy || !isConnected;
+  chatInput.disabled = isBusy || !isConnected;
+}
+
+/**
+ * Reset connection state and disable the composer.
+ * The actual input values remain visible so the user can adjust and reconnect quickly.
+ */
+function resetConnectionState() {
+  isConnected = false;
+  syncComposerState();
+}
+
+/**
+ * Sync the composer enabled/disabled state with the connection flag.
+ * The placeholder is also updated so the next step is obvious to the user.
+ */
+function syncComposerState() {
+  chatInput.disabled = !isConnected;
+  sendButton.disabled = !isConnected;
+  chatInput.placeholder = isConnected
+    ? 'Type your message here...'
+    : 'Connect first, then type a message here...';
 }
 
 /**

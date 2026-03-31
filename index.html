@@ -3,18 +3,18 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Local LLM Endpoint Tester</title>
+  <title>Local LLM Chat Tester</title>
   <link rel="stylesheet" href="style.css" />
 </head>
 <body>
   <main class="app-shell">
     <aside class="sidebar">
       <div class="panel brand-panel">
-        <h1>Local LLM Endpoint Tester</h1>
+        <h1>Local LLM Chat Tester</h1>
         <p>
-          This tester is built for <strong>LM Studio</strong>, <strong>Ollama</strong>, and
+          This interface is built for <strong>LM Studio</strong>, <strong>Ollama</strong>, and
           <strong>OpenClaw</strong>. Choose an app first, then the provider-specific connection
-          options will appear.
+          options will appear. After a successful connect test, you can keep chatting in the main panel.
         </p>
       </div>
 
@@ -67,7 +67,7 @@
 
         <div class="button-stack">
           <button id="connectButton" class="button primary hidden" type="button">Connect</button>
-          <button id="clearButton" class="button secondary" type="button">Clear messages</button>
+          <button id="clearButton" class="button secondary" type="button">Clear chat</button>
         </div>
 
         <div id="statusBox" class="status-box">Status: Waiting for provider selection.</div>
@@ -77,8 +77,11 @@
     <section class="chat-panel">
       <header class="chat-header">
         <div>
-          <h2>Response</h2>
-          <p>Connect sends a fixed <strong>hello</strong> test request using the selected app logic.</p>
+          <h2>Chat</h2>
+          <p>
+            Connect sends a fixed <strong>hello</strong> test request using the selected app logic.
+            After that, use the composer below to chat back and forth.
+          </p>
         </div>
       </header>
 
@@ -86,6 +89,22 @@
         <article class="message system">
           Select an app to begin. The correct fields and endpoint choices will appear dynamically.
         </article>
+      </section>
+
+      <section class="composer-panel">
+        <label for="chatInput" class="label">Message</label>
+        <textarea
+          id="chatInput"
+          class="input composer-input"
+          placeholder="Connect first, then type a message here..."
+          disabled
+        ></textarea>
+        <div class="composer-actions">
+          <button id="sendButton" class="button primary" type="button" disabled>Send message</button>
+        </div>
+        <p class="helper-text">
+          The composer is enabled after a successful connect test. Enter sends the message. Shift + Enter adds a new line.
+        </p>
       </section>
     </section>
   </main>

@@ -21,14 +21,14 @@ export const openClawProvider = {
 
 /**
  * Build a complete OpenClaw request object.
- * OpenClaw is wired here around the responses endpoint and sends a single input string of "hello".
+ * OpenClaw is wired here around the responses endpoint and sends a single input string built from the conversation.
  */
-export function buildOpenClawRequest({ inputUrl, endpoint, method, model, token }) {
+export function buildOpenClawRequest({ inputUrl, endpoint, method, model, token, messageText, history }) {
   const normalized = resolveRequestUrl(inputUrl, endpoint);
   const headers = buildHeaders(token);
   const requestBody = {
     model,
-    input: 'hello'
+    input: buildTranscriptInput(history, messageText)
   };
 
   return {
@@ -95,4 +95,19 @@ function buildHeaders(token) {
   }
 
   return headers;
+}
+
+/**
+ * Flatten the conversation into a plain text transcript.
+ * OpenClaw responses input is handled here as a single text block for simplicity.
+ */
+function buildTranscriptInput(history, messageText) {
+  const transcript = Array.isArray(history)
+    ? history
+        .filter((item) => item && (item.role === 'user' || item.role === 'assistant'))
+        .map((item) => `${item.role.toUpperCase()}: ${item.content}`)
+    : [];
+
+  transcript.push(`USER: ${messageText}`);
+  return transcript.join('\n\n');
 }

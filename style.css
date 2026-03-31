@@ -44,11 +44,13 @@ body {
   display: flex;
   flex-direction: column;
   gap: 18px;
+  min-width: 0;
 }
 
 .panel,
 .chat-header,
-.messages {
+.messages,
+.composer-panel {
   background: rgba(18, 25, 50, 0.95);
   border: 1px solid var(--border);
   border-radius: 18px;
@@ -91,10 +93,21 @@ body {
   color: var(--text);
 }
 
+.composer-input {
+  min-height: 110px;
+  resize: vertical;
+}
+
 .button-stack {
   display: grid;
   gap: 10px;
   margin-top: 18px;
+}
+
+.composer-actions {
+  display: flex;
+  justify-content: flex-end;
+  margin-top: 14px;
 }
 
 .button {
@@ -106,9 +119,15 @@ body {
   font-weight: 700;
 }
 
-.button:disabled {
+.composer-actions .button {
+  width: auto;
+  min-width: 160px;
+}
+
+.button:disabled,
+.input:disabled {
   opacity: 0.65;
-  cursor: wait;
+  cursor: not-allowed;
 }
 
 .button.primary {
@@ -145,13 +164,14 @@ body {
   color: var(--warning);
 }
 
-.chat-header {
+.chat-header,
+.composer-panel {
   padding: 18px 20px;
 }
 
 .messages {
   flex: 1;
-  min-height: 70vh;
+  min-height: 48vh;
   padding: 20px;
   overflow: auto;
   display: flex;
@@ -205,6 +225,10 @@ body {
   }
 
   .messages {
-    min-height: 50vh;
+    min-height: 36vh;
+  }
+
+  .composer-actions .button {
+    width: 100%;
   }
 }

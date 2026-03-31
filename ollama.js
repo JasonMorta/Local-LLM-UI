@@ -35,7 +35,7 @@ export const ollamaProvider = {
  * Build a complete Ollama request object.
  * The endpoint determines whether the payload uses prompt-based generation or chat-style messages.
  */
-export function buildOllamaRequest({ inputUrl, endpoint, method, model, token }) {
+export function buildOllamaRequest({ inputUrl, endpoint, method, model, token, messageText, history }) {
   const normalized = resolveRequestUrl(inputUrl, endpoint);
   const headers = buildHeaders(token);
 
@@ -54,11 +54,11 @@ export function buildOllamaRequest({ inputUrl, endpoint, method, model, token })
     };
   }
 
-  // Native Ollama generate uses a model plus a single prompt string.
+  // Native Ollama generate uses a model plus a single prompt string, so the chat history is flattened.
   if (endpoint === '/api/generate') {
     const requestBody = {
       model,
-      prompt: 'hello',
+      prompt: buildTranscriptInput(history, messageText),
       stream: false
     };
 
@@ -76,16 +76,11 @@ export function buildOllamaRequest({ inputUrl, endpoint, method, model, token })
     };
   }
 
-  // Native Ollama chat uses a model plus messages.
+  // Native Ollama chat uses a model plus messages, so structured history can be preserved.
   const requestBody = {
     model,
     stream: false,
-    messages: [
-      {
-        role: 'user',
-        content: 'hello'
-      }
-    ]
+    messages: buildChatMessages(history, messageText)
   };
 
   return {
@@ -161,4 +156,39 @@ function buildHeaders(token) {
   }
 
   return headers;
+}
+
+/**
+ * Convert the visible conversation history plus the new message into Ollama chat messages.
+ * Only user and assistant turns are sent back to the provider.
+ */
+function buildChatMessages(history, messageText) {
+  const normalizedHistory = Array.isArray(history)
+    ? history.filter((item) => item && (item.role === 'user' || item.role === 'assistant')).map((item) => ({
+        role: item.role,
+        content: item.content
+      }))
+    : [];
+
+  normalizedHistory.push({
+    role: 'user',
+    content: messageText
+  });
+
+  return normalizedHistory;
+}
+
+/**
+ * Flatten the conversation into a plain text transcript.
+ * This is used for Ollama endpoints that accept a single prompt string.
+ */
+function buildTranscriptInput(history, messageText) {
+  const transcript = Array.isArray(history)
+    ? history
+        .filter((item) => item && (item.role === 'user' || item.role === 'assistant'))
+        .map((item) => `${item.role.toUpperCase()}: ${item.content}`)
+    : [];
+
+  transcript.push(`USER: ${messageText}`);
+  return transcript.join('\n\n');
 }

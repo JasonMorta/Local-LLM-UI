@@ -37,7 +37,7 @@ export const lmStudioProvider = {
  * The function switches body format based on the chosen endpoint because LM Studio exposes
  * multiple OpenAI-style endpoints that do not all use the same payload shape.
  */
-export function buildLmStudioRequest({ inputUrl, endpoint, method, model, token }) {
+export function buildLmStudioRequest({ inputUrl, endpoint, method, model, token, messageText, history }) {
   const normalized = resolveRequestUrl(inputUrl, endpoint);
   const headers = buildHeaders(token);
 
@@ -56,11 +56,11 @@ export function buildLmStudioRequest({ inputUrl, endpoint, method, model, token 
     };
   }
 
-  // The responses endpoint expects a single input string instead of a messages array.
+  // The responses endpoint expects a single input string, so the chat history is flattened.
   if (endpoint === '/v1/responses') {
     const requestBody = {
       model,
-      input: 'hello',
+      input: buildTranscriptInput(history, messageText),
       temperature: 0.7
     };
 
@@ -78,15 +78,10 @@ export function buildLmStudioRequest({ inputUrl, endpoint, method, model, token 
     };
   }
 
-  // The chat completions endpoint expects a messages array.
+  // The chat completions endpoint accepts a full messages array, so the conversation can be preserved.
   const requestBody = {
     model,
-    messages: [
-      {
-        role: 'user',
-        content: 'hello'
-      }
-    ],
+    messages: buildChatMessages(history, messageText),
     temperature: 0.7
   };
 
@@ -165,4 +160,39 @@ function buildHeaders(token) {
   }
 
   return headers;
+}
+
+/**
+ * Convert the visible conversation history plus the new message into OpenAI-style chat messages.
+ * The helper filters the history so only user and assistant turns are sent back to the model.
+ */
+function buildChatMessages(history, messageText) {
+  const normalizedHistory = Array.isArray(history)
+    ? history.filter((item) => item && (item.role === 'user' || item.role === 'assistant')).map((item) => ({
+        role: item.role,
+        content: item.content
+      }))
+    : [];
+
+  normalizedHistory.push({
+    role: 'user',
+    content: messageText
+  });
+
+  return normalizedHistory;
+}
+
+/**
+ * Flatten the conversation into a plain text transcript.
+ * This is used for endpoints that accept a single input string instead of a structured messages array.
+ */
+function buildTranscriptInput(history, messageText) {
+  const transcript = Array.isArray(history)
+    ? history
+        .filter((item) => item && (item.role === 'user' || item.role === 'assistant'))
+        .map((item) => `${item.role.toUpperCase()}: ${item.content}`)
+    : [];
+
+  transcript.push(`USER: ${messageText}`);
+  return transcript.join('\n\n');
 }
